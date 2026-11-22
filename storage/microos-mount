@@ -1,0 +1,72 @@
+#!/bin/sh
+# MicroOS v1.0 Safe Mount Wrapper (/usr/local/bin/mount)
+# Passes low-level/flag invocations directly to /bin/mount.
+# For user invocations 'mount <dev> [target]', probes filesystem type first,
+# creates /mnt/ssd if needed, and refuses to blindly mount unknown FS read-write.
+
+set -u
+
+# Pass through standard mount listing or option-bearing invocations directly
+if [ "$#" -eq 0 ]; then
+    exec /bin/mount
+fi
+case "$1" in
+    -*) exec /bin/mount "$@" ;;
+esac
+
+dev="$1"
+target="${2:-/mnt/ssd}"
+
+# Normalize bare device name like sda1 -> /dev/sda1 if block device exists
+if [ ! -e "$dev" ] && [ -b "/dev/$dev" ]; then
+    dev="/dev/$dev"
+fi
+
+# If not a block device, fall back to /bin/mount (e.g. bind/pseudo mounts)
+if [ ! -b "$dev" ]; then
+    exec /bin/mount "$@"
+fi
+
+mkdir -p "$target"
+
+# Probe filesystem signature safely
+fstype="$(blkid "$dev" 2>/dev/null | sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')"
+if [ -z "$fstype" ]; then
+    echo "mount: WARNING: No recognized filesystem signature found on $dev."
+    echo "mount: Refusing read-write mount to prevent data corruption."
+    echo "mount: Use 'disks info $dev' to inspect, or '/bin/mount -o ro ...' manually if intended."
+    exit 1
+fi
+
+case "$fstype" in
+    ext2|ext3|ext4)
+        /bin/mount -t "$fstype" "$dev" "$target"
+        ;;
+    vfat|fat|msdos)
+        /bin/mount -t vfat -o utf8,umask=0022 "$dev" "$target"
+        ;;
+    exfat)
+        /bin/mount -t exfat "$dev" "$target"
+        ;;
+    ntfs)
+        # Mount NTFS safely with ntfs3; fall back to read-only if dirty/unsupported
+        /bin/mount -t ntfs3 "$dev" "$target" 2>/dev/null || {
+            echo "mount: NTFS volume may be dirty or hibernated; mounting read-only for safety."
+            /bin/mount -t ntfs3 -o ro "$dev" "$target"
+        }
+        ;;
+    iso9660)
+        /bin/mount -t iso9660 -o ro "$dev" "$target"
+        ;;
+    *)
+        echo "mount: Unknown or unverified filesystem '$fstype' on $dev."
+        echo "mount: Mounting read-only to prevent potential data corruption."
+        /bin/mount -o ro "$dev" "$target"
+        ;;
+esac
+
+rc=$?
+if [ "$rc" -eq 0 ]; then
+    echo "Mounted $dev ($fstype) on $target."
+fi
+exit "$rc"

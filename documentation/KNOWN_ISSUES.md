@@ -1,0 +1,6 @@
+# MicroOS v1.0 Known Issues & Limitations
+
+1. **UEFI Secure Boot**: The custom-built Linux kernel is unsigned; UEFI Secure Boot must be disabled on physical laptops to boot `microos.iso`.
+2. **Physical Wi-Fi Firmware Coverage vs. 50 MB ISO Cap**: To strictly respect the 50 MB (50,000,000 bytes) ISO limit, only curated high-coverage firmware for common Intel (`iwlwifi`), Realtek (`rtw88`, `rtl_nic`), and MediaTek (`mt7961`/`mt7921`) chipsets is bundled into the base ISO. Less common Wi-Fi adapters report missing firmware cleanly and can fetch additional Debian firmware packages via persistent APT (`firmware-iwlwifi`, `firmware-realtek`, `firmware-misc-nonfree`).
+3. **Physical Laptop Hardware Validation**: Automated validation runs in Oracle VirtualBox; native physical laptop testing (bare-metal Wi-Fi radios, physical NVMe controllers, laptop ACPI power management) is marked **PENDING** until tested on physical hardware by the user.
+4. **Live Mode APT Persistence**: Because Debian glibc + APT + dpkg metadata exceed the 50 MB ISO cap, `apt` and `dpkg` require persistent storage (`LABEL=MICROOS_PERSIST` with `/persist/debian`). MicroOS boots fully and runs all core commands and all 8 Micro Arcade games in RAM-only live mode without persistent storage.

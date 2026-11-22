@@ -1,0 +1,20 @@
+MicroOS Release Build Information
+=================================
+Distribution   : MicroOS v1.0 (Minimal)
+Architecture   : x86_64
+Build Date UTC : 2026-11-22 19:46:56 UTC
+Kernel Release : 6.6.63
+BusyBox        : 1.36.1
+Bootloader     : GRUB 2 (Hybrid BIOS i386-pc + UEFI x86_64-efi)
+ISO Generator  : xorriso
+
+Measured Artifact Sizes:
+  release/microos.iso  : 12769280 bytes (12.77 MB) [Limit: 50000000 bytes]
+  boot/vmlinuz         : 5325824 bytes (5201 KB)
+  boot/initramfs.img   : 3256040 bytes (3179 KB)
+
+SHA256 Checksum:
+  f072e24fbc9e64ce31fae7f495ac6f55104391fee57ddc455d48237fb5532ed1  microos.iso
+
+Hypervisor Validation Policy:
+  Oracle VirtualBox ONLY (QEMU strictly prohibited and unused)

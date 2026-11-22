@@ -1,0 +1,45 @@
+#!/bin/sh
+# MicroOS v1.0 Early Initramfs /init
+# Boot chain: Firmware -> GRUB -> Linux Kernel -> Initramfs -> /init -> BusyBox init -> MicroOS shell
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Mount essential kernel virtual filesystems
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sysfs /sys 2>/dev/null || true
+mount -t tmpfs tmpfs /run 2>/dev/null || true
+mount -t tmpfs tmpfs /tmp 2>/dev/null || true
+chmod 1777 /tmp 2>/dev/null || true
+
+mkdir -p /dev/pts /dev/shm /run/dbus /var/lib/iwd /var/run /mnt/ssd /persist
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+mount -t tmpfs tmpfs /dev/shm 2>/dev/null || true
+
+# Configure console and display MicroOS boot branding
+echo ""
+echo "========================================"
+echo "MICROOS"
+echo "Minimal Linux. Maximum control."
+echo "========================================"
+echo ""
+
+# Check for explicit emergency shell kernel parameter
+if grep -qw "microos.emergency=1" /proc/cmdline 2>/dev/null; then
+    echo "[init] Emergency shell requested via kernel cmdline."
+    exec /bin/sh
+fi
+
+# Populate device nodes via mdev
+if [ -x /sbin/mdev ]; then
+    [ -f /proc/sys/kernel/hotplug ] && echo /sbin/mdev > /proc/sys/kernel/hotplug 2>/dev/null || true
+    /sbin/mdev -s 2>/dev/null || true
+fi
+
+# Hand off to BusyBox init (PID 1)
+if [ -x /sbin/init ]; then
+    exec /sbin/init
+fi
+
+echo "[init] CRITICAL: /sbin/init not found! Dropping to emergency shell."
+exec /bin/sh

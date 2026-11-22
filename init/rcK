@@ -1,0 +1,28 @@
+#!/bin/sh
+# MicroOS v1.0 Clean Shutdown Script (/etc/init.d/rcK)
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+echo ""
+echo "[rcK] Shutting down MicroOS v1.0..."
+
+# Stop networking daemons gracefully
+killall udhcpc 2>/dev/null || true
+killall iwd 2>/dev/null || true
+killall dbus-daemon 2>/dev/null || true
+
+# Sync and cleanly unmount any persistent / user filesystems
+sync
+if [ -x /usr/local/bin/unmount ]; then
+    for mp in /mnt/ssd /persist; do
+        if grep -q " $mp " /proc/mounts 2>/dev/null; then
+            echo "[rcK] Unmounting $mp..."
+            umount "$mp" 2>/dev/null || umount -l "$mp" 2>/dev/null || true
+        fi
+    done
+fi
+
+# Unmount any remaining non-virtual filesystems
+umount -a -r 2>/dev/null || true
+sync
+echo "[rcK] Filesystems synced. Halting."

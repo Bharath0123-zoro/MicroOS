@@ -1,0 +1,49 @@
+#!/bin/sh
+# MicroOS v1.0 Help System (/usr/local/bin/help)
+
+cat <<'EOF'
+================================================
+MICROOS v1.0 — COMMAND REFERENCE
+Minimal Linux. Maximum control.
+================================================
+
+System & Information:
+  help              Show this command reference
+  clear             Clear the terminal screen
+  sysinfo           Display MicroOS system overview & memory usage
+  hardware [sub]    Inspect live hardware (cpu, memory, network, storage, usb, pci)
+  reboot            Safely sync filesystems and reboot
+  poweroff          Safely sync filesystems and power off
+
+Networking & Wi-Fi:
+  wifi status       Show active Wi-Fi, Ethernet, default route & DNS
+  wifi scan         Scan for nearby wireless networks
+  wifi connect <S>  Connect securely to Wi-Fi network <S>
+  wifi disconnect   Disconnect from wireless network
+  wifi dhcp [if]    Acquire IPv4 lease via DHCP
+  wifi static ...   Configure static IP address, gateway & DNS
+
+Storage & Persistence:
+  disks [list|info] Inspect SATA, NVMe, USB and virtual disks/partitions
+  mount <dev> [dir] Safely mount a partition (default: /mnt/ssd)
+  unmount [dir]     Safely sync and unmount a partition (default: /mnt/ssd)
+
+Package Management (Debian-Compatible Persistent Storage):
+  apt status        Check Debian glibc persistent userspace status
+  apt update        Update Debian package lists
+  apt search <q>    Search Debian repositories
+  apt install <p>   Install Debian package(s) into persistent storage
+  apt remove <p>    Remove Debian package(s)
+  apt upgrade       Upgrade installed Debian packages
+
+Micro Arcade (Offline Terminal Games):
+  arcade            Launch the Micro Arcade interactive menu
+  snake             Play Snake
+  tetris            Play Tetris
+  pong              Play Pong (2-player)
+  mines             Play Minesweeper
+  2048              Play 2048
+  guess             Play Number Guessing
+  tictactoe         Play Tic-Tac-Toe (2P or vs CPU)
+  spaceinvaders     Play Space Invaders
+EOF

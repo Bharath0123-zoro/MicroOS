@@ -1,0 +1,22 @@
+# MicroOS v1.0 Shell Environment (/etc/profile)
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export USER=micro
+export LOGNAME=micro
+export HOME=/home/micro
+export HOSTNAME=micro
+export PAGER=more
+
+# Custom MicroOS prompt: micro@micro:~$
+export PS1='micro@micro:\w$ '
+
+# Convenient aliases
+alias ll='ls -la'
+alias la='ls -A'
+alias cls='clear'
+alias mem='hardware memory'
+alias cpu='hardware cpu'
+alias net='wifi status'
+alias storage='disks list'
+alias help='/usr/local/bin/help'
+help() { /usr/local/bin/help "$@"; }

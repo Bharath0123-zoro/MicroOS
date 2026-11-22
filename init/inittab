@@ -1,0 +1,15 @@
+# MicroOS v1.0 BusyBox inittab
+::sysinit:/etc/init.d/rcS
+
+# Primary virtual terminal (physical monitor / VirtualBox display)
+tty1::respawn:/usr/local/sbin/microos-shell
+
+# Secondary virtual terminal (Alt+F2)
+tty2::askfirst:/usr/local/sbin/microos-shell
+
+# Serial console (VirtualBox automated testing / headless recovery)
+::respawn:/usr/local/sbin/microos-serial-tty
+
+# Clean shutdown & reboot hooks
+::ctrlaltdel:/sbin/reboot
+::shutdown:/etc/init.d/rcK

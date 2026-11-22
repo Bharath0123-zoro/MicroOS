@@ -1,0 +1,67 @@
+#!/bin/sh
+# MicroOS v1.0 System Initialization Script (/etc/init.d/rcS)
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+echo "[rcS] Starting MicroOS v1.0 system initialization..."
+
+# 1. Hostname & loopback network
+hostname -F /etc/hostname 2>/dev/null || hostname micro
+ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up 2>/dev/null || true
+
+# 2. Kernel quiet log level on console (keeps dmesg intact)
+echo "3 4 1 7" > /proc/sys/kernel/printk 2>/dev/null || true
+
+# 3. Populate /dev and trigger automatic PCI/USB/platform modalias module loading
+/sbin/mdev -s 2>/dev/null || true
+if [ -d "/lib/modules/$(uname -r)" ]; then
+    echo "[rcS] Probing hardware modules..."
+    # Load matching modalias drivers silently (Ethernet, Wi-Fi, VirtIO, etc.)
+    find /sys/devices -name modalias -exec cat {} + 2>/dev/null | sort -u | while read -r alias; do
+        [ -n "$alias" ] && modprobe -q "$alias" 2>/dev/null || true
+    done
+    /sbin/mdev -s 2>/dev/null || true
+fi
+
+# 4. Safe read-only scan for an existing MicroOS persistent partition (LABEL=MICROOS_PERSIST)
+# Never formats or modifies any unknown partition!
+if [ -x /usr/local/sbin/microos-persist-attach ]; then
+    /usr/local/sbin/microos-persist-attach || true
+fi
+
+# 5. Start D-Bus and iwd wireless daemon (only if installed)
+mkdir -p /run/dbus /var/lib/iwd
+chmod 0700 /var/lib/iwd 2>/dev/null || true
+
+if [ -x /usr/bin/dbus-daemon ]; then
+    rm -f /run/dbus/pid /run/dbus/system_bus_socket
+    /usr/bin/dbus-daemon --system --fork 2>/dev/null && echo "[rcS] D-Bus system daemon started." || true
+fi
+
+if [ -x /usr/libexec/iwd ]; then
+    /usr/libexec/iwd >/dev/null 2>&1 &
+    echo "[rcS] iwd wireless daemon started."
+elif [ -x /usr/sbin/iwd ]; then
+    /usr/sbin/iwd >/dev/null 2>&1 &
+    echo "[rcS] iwd wireless daemon started."
+fi
+
+# 6. Bring up any detected wired Ethernet interfaces non-blockingly via DHCP
+for iface_path in /sys/class/net/*; do
+    [ -e "$iface_path" ] || continue
+    iface="$(basename "$iface_path")"
+    [ "$iface" = "lo" ] && continue
+    # Skip wireless interfaces (managed via 'wifi' command / iwd)
+    [ -d "$iface_path/wireless" ] && continue
+    [ -d "$iface_path/phy80211" ] && continue
+    ip link set "$iface" up 2>/dev/null || true
+    if [ -x /sbin/udhcpc ]; then
+        /sbin/udhcpc -b -i "$iface" -t 3 -T 2 -q -s /usr/share/udhcpc/default.script >/dev/null 2>&1 &
+    fi
+done
+
+# 7. Ensure /root and /home/micro exist with proper permissions
+mkdir -p /root /home/micro /mnt/ssd /persist
+chown 1000:1000 /home/micro 2>/dev/null || true
+
+echo "[rcS] MicroOS v1.0 ready."

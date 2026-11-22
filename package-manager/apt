@@ -1,0 +1,121 @@
+#!/bin/sh
+# MicroOS v1.0 Debian-Compatible APT Wrapper (/usr/local/bin/apt)
+# Executes genuine Debian Bookworm glibc APT/dpkg inside persistent storage
+# (/persist/debian or /mnt/ssd/microos/debian) to maintain ABI compatibility
+# while keeping the base MicroOS ISO under 50 MB.
+
+set -u
+
+find_debian_root() {
+    for candidate in /persist/debian /mnt/ssd/debian /mnt/ssd/microos/debian /persist/microos/debian; do
+        if [ -x "$candidate/usr/bin/apt-get" ] && [ -x "$candidate/usr/bin/dpkg" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_binds() {
+    root="$1"
+    mkdir -p "$root/dev" "$root/dev/pts" "$root/proc" "$root/sys" "$root/run" "$root/tmp" "$root/etc"
+    grep -q " $root/proc " /proc/mounts 2>/dev/null || /bin/mount -t proc proc "$root/proc"
+    grep -q " $root/sys "  /proc/mounts 2>/dev/null || /bin/mount -t sysfs sysfs "$root/sys"
+    grep -q " $root/dev "  /proc/mounts 2>/dev/null || /bin/mount --bind /dev "$root/dev"
+    grep -q " $root/dev/pts " /proc/mounts 2>/dev/null || /bin/mount --bind /dev/pts "$root/dev/pts" 2>/dev/null || true
+    grep -q " $root/run "  /proc/mounts 2>/dev/null || /bin/mount --bind /run "$root/run" 2>/dev/null || true
+    if [ -s /etc/resolv.conf ]; then
+        cp -f /etc/resolv.conf "$root/etc/resolv.conf" 2>/dev/null || true
+    fi
+}
+
+show_status() {
+    echo "=== MicroOS APT / Debian Persistent Userspace Status ==="
+    if droot="$(find_debian_root)"; then
+        echo "  Status         : READY"
+        echo "  Debian Root    : $droot"
+        if [ -r "$droot/etc/os-release" ]; then
+            ver="$(grep '^PRETTY_NAME=' "$droot/etc/os-release" | cut -d= -f2 | tr -d '"')"
+            echo "  Userspace      : $ver"
+        fi
+        ensure_binds "$droot"
+        echo "  APT Version    : $(chroot "$droot" /usr/bin/apt --version 2>/dev/null | head -n1)"
+        echo "  DPKG Version   : $(chroot "$droot" /usr/bin/dpkg --version 2>/dev/null | head -n1)"
+        echo "  Installed Pkgs : $(chroot "$droot" /usr/bin/dpkg-query -f '.\n' -W 2>/dev/null | wc -l)"
+        echo "  Repositories   :"
+        grep -vE '^\s*(#|$)' "$droot/etc/apt/sources.list" 2>/dev/null | sed 's/^/    /'
+    else
+        echo "  Status         : PERSISTENT STORAGE REQUIRED (Live Mode)"
+        echo "  Reason         : No Debian Bookworm glibc root found at /persist/debian or /mnt/ssd/debian."
+        echo ""
+        echo "  MicroOS boots independently in minimal live mode to stay under 50 MB."
+        echo "  To enable full Debian APT/dpkg package management:"
+        echo "    1. Attach an SSD or USB partition labeled MICROOS_PERSIST (ext4) or mount it at /mnt/ssd"
+        echo "    2. Extract the MicroOS Debian Bookworm persistent rootfs to /mnt/ssd/debian"
+        echo "       (or run 'scripts/build-debian-persist.sh' on the build host)."
+        echo "    3. Verify with 'apt status', then run 'apt update' and 'apt install <pkg>'."
+    fi
+}
+
+cmd="${1:-help}"
+case "$cmd" in
+    status)
+        show_status
+        exit 0
+        ;;
+    help|-h|--help)
+        echo "MicroOS Debian-Compatible APT Package Manager"
+        echo "Usage:"
+        echo "  apt status                 Show persistent Debian userspace status"
+        echo "  apt update                 Refresh Debian repository package index"
+        echo "  apt search <term>          Search Debian packages"
+        echo "  apt install <pkg...>       Install packages into persistent Debian userspace"
+        echo "  apt remove <pkg...>        Remove packages from persistent Debian userspace"
+        echo "  apt upgrade                Upgrade installed packages"
+        echo "  apt shell                  Enter interactive Debian glibc userspace shell"
+        echo "  apt run <cmd...>           Execute a command installed inside Debian userspace"
+        exit 0
+        ;;
+esac
+
+droot="$(find_debian_root)" || {
+    echo "apt: Persistent storage with Debian glibc userspace is required."
+    echo "     Run 'apt status' for setup instructions. MicroOS live mode remains fully operational."
+    exit 1
+}
+
+ensure_binds "$droot"
+
+case "$cmd" in
+    update|upgrade|install|remove|autoremove|purge|list|show|policy)
+        exec chroot "$droot" /usr/bin/env -i \
+            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            TERM="${TERM:-linux}" HOME=/root DEBIAN_FRONTEND=noninteractive \
+            /usr/bin/apt "$@"
+        ;;
+    search)
+        shift
+        exec chroot "$droot" /usr/bin/env -i \
+            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            TERM="${TERM:-linux}" HOME=/root \
+            /usr/bin/apt-cache search "$@"
+        ;;
+    shell)
+        exec chroot "$droot" /usr/bin/env -i \
+            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            TERM="${TERM:-linux}" HOME=/root PS1='micro-debian:\w# ' \
+            /bin/bash
+        ;;
+    run)
+        shift
+        exec chroot "$droot" /usr/bin/env -i \
+            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            TERM="${TERM:-linux}" HOME=/root "$@"
+        ;;
+    *)
+        exec chroot "$droot" /usr/bin/env -i \
+            PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            TERM="${TERM:-linux}" HOME=/root \
+            /usr/bin/apt "$@"
+        ;;
+esac

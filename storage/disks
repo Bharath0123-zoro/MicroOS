@@ -1,0 +1,125 @@
+#!/bin/sh
+# MicroOS v1.0 Storage & Disk Management Utility
+# Safe inspection of SATA, NVMe, USB, and virtual storage devices.
+# Never automatically formats or modifies any storage media.
+
+set -u
+
+list_disks() {
+    echo "=== MicroOS Storage Devices ==="
+    printf "%-12s %-10s %-10s %-10s %-14s %-16s %s\n" \
+        "DEVICE" "TYPE" "SIZE" "FSTYPE" "LABEL" "MOUNTPOINT" "MODEL"
+    echo "----------------------------------------------------------------------------------------"
+    found=0
+    for blk in /sys/block/*; do
+        [ -d "$blk" ] || continue
+        name="$(basename "$blk")"
+        case "$name" in loop*|ram*|dm-*) continue ;; esac
+        found=1
+        sectors="$(cat "$blk/size" 2>/dev/null || echo 0)"
+        size_mb=$(( (sectors * 512) / 1048576 ))
+        if [ "$size_mb" -ge 1024 ]; then
+            size_str="$((size_mb / 1024)).$(( (size_mb % 1024) * 10 / 1024 ))G"
+        else
+            size_str="${size_mb}M"
+        fi
+        model="$(cat "$blk/device/model" 2>/dev/null | tr -s ' ' | sed 's/^[ \t]*//;s/[ \t]*$//' || echo "-")"
+        case "$name" in
+            nvme*) dtype="NVMe" ;;
+            sr*)   dtype="Optical" ;;
+            vd*)   dtype="VirtIO" ;;
+            sd*)
+                if readlink -f "$blk/device" 2>/dev/null | grep -q '/usb'; then
+                    dtype="USB"
+                else
+                    dtype="SATA/SCSI"
+                fi
+                ;;
+            *)     dtype="Disk" ;;
+        esac
+        blk_info="$(blkid "/dev/$name" 2>/dev/null || true)"
+        fstype="$(echo "$blk_info" | sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')"
+        label="$(echo "$blk_info" | sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
+        mp="$(awk -v d="/dev/$name" '$1==d{print $2; exit}' /proc/mounts 2>/dev/null)"
+        printf "%-12s %-10s %-10s %-10s %-14s %-16s %s\n" \
+            "/dev/$name" "$dtype" "$size_str" "${fstype:--}" "${label:--}" "${mp:--}" "$model"
+
+        for part in "$blk/${name}"*; do
+            [ -d "$part" ] || continue
+            pname="$(basename "$part")"
+            psec="$(cat "$part/size" 2>/dev/null || echo 0)"
+            pmb=$(( (psec * 512) / 1048576 ))
+            if [ "$pmb" -ge 1024 ]; then
+                psize="$((pmb / 1024)).$(( (pmb % 1024) * 10 / 1024 ))G"
+            else
+                psize="${pmb}M"
+            fi
+            pinfo="$(blkid "/dev/$pname" 2>/dev/null || true)"
+            pfstype="$(echo "$pinfo" | sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')"
+            plabel="$(echo "$pinfo" | sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
+            pmp="$(awk -v d="/dev/$pname" '$1==d{print $2; exit}' /proc/mounts 2>/dev/null)"
+            printf "  %-10s %-10s %-10s %-10s %-14s %-16s\n" \
+                "/dev/$pname" "Part" "$psize" "${pfstype:--}" "${plabel:--}" "${pmp:--}"
+        done
+    done
+    [ "$found" -eq 0 ] && echo "  No block storage devices detected."
+}
+
+disk_info() {
+    target="${1:-}"
+    if [ -z "$target" ]; then
+        list_disks
+        echo ""
+        echo "=== Active Non-Virtual Mounts ==="
+        awk '$1 ~ /^\/dev\// {printf "  %-16s -> %-16s (%s, %s)\n", $1, $2, $3, $4}' /proc/mounts
+        echo ""
+        echo "=== Persistent Storage Status ==="
+        if grep -q " /persist " /proc/mounts 2>/dev/null; then
+            echo "  Persistent storage : ACTIVE (/persist)"
+            df -h /persist 2>/dev/null | sed 's/^/    /'
+        else
+            echo "  Persistent storage : NOT MOUNTED (running in minimal live mode)"
+        fi
+        return 0
+    fi
+
+    case "$target" in
+        /dev/*) dev="$target" ;;
+        *)      dev="/dev/$target" ;;
+    esac
+    if [ ! -b "$dev" ]; then
+        echo "disks info: '$dev' is not a block device."
+        return 1
+    fi
+    bname="$(basename "$dev")"
+    echo "=== Disk Info: $dev ==="
+    if [ -d "/sys/block/$bname" ]; then
+        sec="$(cat "/sys/block/$bname/size" 2>/dev/null || echo 0)"
+        echo "  Size       : $(( (sec * 512) / 1048576 )) MB (${sec} sectors)"
+        echo "  Model      : $(cat "/sys/block/$bname/device/model" 2>/dev/null || echo unknown)"
+        echo "  Vendor     : $(cat "/sys/block/$bname/device/vendor" 2>/dev/null || echo unknown)"
+        echo "  Removable  : $(cat "/sys/block/$bname/removable" 2>/dev/null || echo 0)"
+        echo "  Read-Only  : $(cat "/sys/block/$bname/ro" 2>/dev/null || echo 0)"
+    fi
+    echo "  blkid      : $(blkid "$dev" 2>/dev/null || echo 'no filesystem signature detected')"
+    if command -v fdisk >/dev/null 2>&1; then
+        echo "  Partitions :"
+        fdisk -l "$dev" 2>/dev/null | sed 's/^/    /'
+    fi
+}
+
+case "${1:-list}" in
+    list|"") list_disks ;;
+    info)    shift; disk_info "${1:-}" ;;
+    help|-h|--help)
+        echo "Usage: disks [list | info [device]]"
+        echo "  disks list          List all storage devices, partitions, filesystems and mounts"
+        echo "  disks info [dev]    Show detailed info for a device or overall storage summary"
+        echo "  mount <dev> [dir]   Safely mount a storage partition (default /mnt/ssd)"
+        echo "  unmount <dir|dev>   Safely sync and unmount a storage partition"
+        ;;
+    *)
+        echo "disks: unknown subcommand '$1'. Run 'disks help' for usage."
+        exit 1
+        ;;
+esac

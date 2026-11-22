@@ -1,0 +1,257 @@
+#!/bin/sh
+# MicroOS v1.0 Native Linux Wi-Fi & Networking Manager
+# Backed by iwd (iwctl), iproute2 (ip), and BusyBox udhcpc.
+# Security: Never hardcodes credentials, never logs passphrases, protects saved profiles (0600).
+
+set -u
+
+CRED_DIR="/var/lib/iwd"
+PERSIST_CRED_DIR="/persist/etc/iwd"
+
+find_wifi_iface() {
+    for net in /sys/class/net/*; do
+        [ -e "$net" ] || continue
+        if [ -d "$net/wireless" ] || [ -d "$net/phy80211" ]; then
+            basename "$net"
+            return 0
+        fi
+    done
+    return 1
+}
+
+ensure_iwd() {
+    if ! pidof dbus-daemon >/dev/null 2>&1 && [ -x /usr/bin/dbus-daemon ]; then
+        mkdir -p /run/dbus
+        /usr/bin/dbus-daemon --system --fork 2>/dev/null || true
+    fi
+    if ! pidof iwd >/dev/null 2>&1; then
+        mkdir -p "$CRED_DIR"
+        chmod 0700 "$CRED_DIR" 2>/dev/null || true
+        if [ -x /usr/libexec/iwd ]; then
+            /usr/libexec/iwd >/dev/null 2>&1 &
+            sleep 1
+        elif [ -x /usr/sbin/iwd ]; then
+            /usr/sbin/iwd >/dev/null 2>&1 &
+            sleep 1
+        fi
+    fi
+}
+
+check_firmware_issues() {
+    dmesg 2>/dev/null | grep -iE 'firmware.*(failed|direct-loading|not found)|iwlwifi.*no suitable firmware|rtw.*firmware|mt7921.*firmware' | tail -n 5
+}
+
+diagnose_no_wifi() {
+    echo "No wireless (Wi-Fi) interface is currently active."
+    # Distinguish VirtualBox Ethernet from physical Wi-Fi
+    if grep -qi "VirtualBox" /sys/class/dmi/id/product_name 2>/dev/null; then
+        echo "Note: Running inside Oracle VirtualBox."
+        echo "  VirtualBox emulates wired Ethernet (e.g., eth0), not a physical Wi-Fi radio."
+        echo "  Use 'wifi status' to inspect Ethernet interfaces or boot natively on a laptop for Wi-Fi."
+    fi
+    # Check for PCI Wi-Fi devices with missing firmware or unsupported drivers
+    for dev in /sys/bus/pci/devices/*; do
+        [ -d "$dev" ] || continue
+        class="$(cat "$dev/class" 2>/dev/null || echo "")"
+        case "${class#0x}" in
+            0280*)
+                vid="$(cat "$dev/vendor" 2>/dev/null)"
+                did="$(cat "$dev/device" 2>/dev/null)"
+                drv="none"
+                [ -L "$dev/driver" ] && drv="$(basename "$(readlink "$dev/driver")")"
+                echo "Detected PCI Wi-Fi hardware: $(basename "$dev") [${vid#0x}:${did#0x}] driver=${drv}"
+                if [ "$drv" = "none" ]; then
+                    echo "  Adapter is currently unsupported by the built-in kernel modules."
+                else
+                    echo "  Driver '${drv}' loaded, but interface did not initialize (firmware may be missing)."
+                fi
+                ;;
+        esac
+    done
+    fw_err="$(check_firmware_issues)"
+    if [ -n "$fw_err" ]; then
+        echo "Kernel firmware messages:"
+        echo "$fw_err" | sed 's/^/  /'
+        echo "Tip: Additional vendor firmware can be installed via persistent APT (firmware-iwlwifi, firmware-realtek, firmware-misc-nonfree)."
+    fi
+}
+
+cmd_status() {
+    echo "=== MicroOS Network Status ==="
+    if iface="$(find_wifi_iface)"; then
+        echo "Wireless Adapter : $iface"
+        if command -v iwctl >/dev/null 2>&1; then
+            ensure_iwd
+            iwctl station "$iface" show 2>/dev/null || echo "  (iwd not responding; checking ip link)"
+        fi
+        ip -brief addr show dev "$iface" 2>/dev/null || true
+    else
+        echo "Wireless Adapter : None detected"
+    fi
+
+    echo ""
+    echo "Wired / Other Interfaces:"
+    found_eth=0
+    for net in /sys/class/net/*; do
+        [ -e "$net" ] || continue
+        n="$(basename "$net")"
+        [ "$n" = "lo" ] && continue
+        [ -d "$net/wireless" ] && continue
+        [ -d "$net/phy80211" ] && continue
+        found_eth=1
+        drv="unknown"
+        [ -L "$net/device/driver" ] && drv="$(basename "$(readlink "$net/device/driver")")"
+        state="$(cat "$net/operstate" 2>/dev/null || echo unknown)"
+        ipinfo="$(ip -4 -o addr show dev "$n" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
+        echo "  $n (driver=$drv, state=$state) IPv4=${ipinfo:-unassigned}"
+    done
+    [ "$found_eth" -eq 0 ] && echo "  None detected (offline mode)"
+
+    echo ""
+    echo "Default Route:"
+    route_info="$(ip route show default 2>/dev/null || true)"
+    [ -n "$route_info" ] && echo "  $route_info" || echo "  None"
+
+    echo "DNS Resolver (/etc/resolv.conf):"
+    if [ -s /etc/resolv.conf ]; then
+        grep '^nameserver' /etc/resolv.conf 2>/dev/null | sed 's/^/  /' || echo "  No nameservers configured"
+    else
+        echo "  Not configured"
+    fi
+}
+
+cmd_scan() {
+    iface="$(find_wifi_iface)" || { diagnose_no_wifi; return 1; }
+    if ! command -v iwctl >/dev/null 2>&1; then
+        echo "Error: iwctl (iwd) is not installed."
+        return 1
+    fi
+    ensure_iwd
+    echo "Scanning for Wi-Fi networks on $iface..."
+    iwctl station "$iface" scan 2>/dev/null || true
+    sleep 2
+    iwctl station "$iface" get-networks 2>/dev/null || {
+        echo "Scan failed. Check 'dmesg | grep -i firmware' or rfkill status."
+        return 1
+    }
+}
+
+cmd_connect() {
+    ssid="${1:-}"
+    if [ -z "$ssid" ]; then
+        echo "Usage: wifi connect <SSID>"
+        echo "  (You will be prompted securely for the passphrase; never pass secrets on CLI history.)"
+        return 1
+    fi
+    iface="$(find_wifi_iface)" || { diagnose_no_wifi; return 1; }
+    if ! command -v iwctl >/dev/null 2>&1; then
+        echo "Error: iwctl (iwd) is not installed."
+        return 1
+    fi
+    ensure_iwd
+    printf "Passphrase for '%s' (leave empty for open network): " "$ssid"
+    stty -echo 2>/dev/null || true
+    IFS= read -r passphrase
+    stty echo 2>/dev/null || true
+    echo ""
+
+    if [ -n "$passphrase" ]; then
+        # Pass passphrase securely without echoing or writing to logs
+        iwctl --passphrase "$passphrase" station "$iface" connect "$ssid"
+        rc=$?
+    else
+        iwctl station "$iface" connect "$ssid"
+        rc=$?
+    fi
+    unset passphrase
+
+    if [ "$rc" -ne 0 ]; then
+        echo "Failed to connect to '$ssid'."
+        return 1
+    fi
+
+    # Lock down saved credentials permissions
+    chmod 0700 "$CRED_DIR" 2>/dev/null || true
+    chmod 0600 "$CRED_DIR"/*.psk "$CRED_DIR"/*.open "$CRED_DIR"/*.8021x 2>/dev/null || true
+
+    # Sync credentials to persistent storage if mounted
+    if grep -q " /persist " /proc/mounts 2>/dev/null; then
+        mkdir -p "$PERSIST_CRED_DIR"
+        chmod 0700 "$PERSIST_CRED_DIR"
+        cp -p "$CRED_DIR"/* "$PERSIST_CRED_DIR"/ 2>/dev/null || true
+        chmod 0600 "$PERSIST_CRED_DIR"/* 2>/dev/null || true
+    fi
+
+    echo "Connected to '$ssid'. Requesting IP via DHCP..."
+    if [ -x /sbin/udhcpc ]; then
+        /sbin/udhcpc -i "$iface" -t 5 -T 2 -n -q -s /usr/share/udhcpc/default.script || true
+    fi
+    ip -brief addr show dev "$iface" 2>/dev/null || true
+}
+
+cmd_disconnect() {
+    iface="$(find_wifi_iface)" || { diagnose_no_wifi; return 1; }
+    if command -v iwctl >/dev/null 2>&1; then
+        ensure_iwd
+        iwctl station "$iface" disconnect
+        echo "Disconnected $iface."
+    else
+        ip link set "$iface" down
+        echo "Brought $iface down."
+    fi
+}
+
+cmd_dhcp() {
+    iface="${1:-}"
+    if [ -z "$iface" ]; then
+        iface="$(find_wifi_iface 2>/dev/null || ls /sys/class/net | grep -v '^lo$' | head -n1)"
+    fi
+    if [ -z "$iface" ]; then
+        echo "No network interface available for DHCP."
+        return 1
+    fi
+    ip link set "$iface" up 2>/dev/null || true
+    echo "Running DHCP client on $iface..."
+    /sbin/udhcpc -i "$iface" -t 5 -T 2 -n -q -s /usr/share/udhcpc/default.script
+}
+
+cmd_static() {
+    iface="${1:-}"
+    cidr="${2:-}"
+    gw="${3:-}"
+    dns="${4:-1.1.1.1}"
+    if [ -z "$iface" ] || [ -z "$cidr" ]; then
+        echo "Usage: wifi static <iface> <ip/prefix> [gateway] [dns]"
+        echo "Example: wifi static eth0 192.168.1.50/24 192.168.1.1 1.1.1.1"
+        return 1
+    fi
+    ip link set "$iface" up
+    ip addr flush dev "$iface"
+    ip addr add "$cidr" dev "$iface"
+    [ -n "$gw" ] && ip route replace default via "$gw" dev "$iface"
+    echo "nameserver $dns" > /etc/resolv.conf
+    echo "Configured static IP $cidr on $iface (gw=${gw:-none}, dns=$dns)."
+}
+
+case "${1:-status}" in
+    scan)       cmd_scan ;;
+    connect)    shift; cmd_connect "$@" ;;
+    disconnect) cmd_disconnect ;;
+    status)     cmd_status ;;
+    dhcp)       shift; cmd_dhcp "$@" ;;
+    static)     shift; cmd_static "$@" ;;
+    help|-h|--help)
+        echo "MicroOS Native Networking & Wi-Fi Manager"
+        echo "Usage:"
+        echo "  wifi status                                  Show Wi-Fi, Ethernet, routes & DNS"
+        echo "  wifi scan                                    Scan nearby Wi-Fi networks"
+        echo "  wifi connect <SSID>                          Connect securely (interactive prompt)"
+        echo "  wifi disconnect                              Disconnect wireless interface"
+        echo "  wifi dhcp [iface]                            Acquire IPv4 address via DHCP"
+        echo "  wifi static <iface> <ip/cidr> [gw] [dns]     Configure static IP networking"
+        ;;
+    *)
+        echo "wifi: unknown subcommand '$1'. Run 'wifi help' for usage."
+        exit 1
+        ;;
+esac

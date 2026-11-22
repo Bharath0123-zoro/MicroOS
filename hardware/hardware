@@ -1,0 +1,287 @@
+#!/bin/sh
+# MicroOS v1.0 Automatic Hardware Detection Utility
+# Reads live kernel interfaces (/proc, /sys) — never fabricates hardware data.
+
+set -u
+
+pci_vendor_name() {
+    case "$1" in
+        0x8086) echo "Intel Corporation" ;;
+        0x1022) echo "AMD (Advanced Micro Devices)" ;;
+        0x10de) echo "NVIDIA Corporation" ;;
+        0x10ec) echo "Realtek Semiconductor" ;;
+        0x14c3) echo "MediaTek Inc." ;;
+        0x168c|0x17cb) echo "Qualcomm Atheros" ;;
+        0x14e4) echo "Broadcom Inc." ;;
+        0x80ee) echo "Oracle VirtualBox (Virtual)" ;;
+        0x1af4) echo "Red Hat VirtIO (Virtual)" ;;
+        0x15ad) echo "VMware (Virtual)" ;;
+        0x144d) echo "Samsung Electronics" ;;
+        0x15b7) echo "SanDisk / Western Digital" ;;
+        0xc0a9) echo "Micron / Crucial" ;;
+        0x1987) echo "Phison Electronics" ;;
+        0x1b4b) echo "Marvell Technology" ;;
+        *) echo "Vendor $1" ;;
+    esac
+}
+
+pci_class_name() {
+    case "${1#0x}" in
+        0101*) echo "IDE Controller" ;;
+        0106*) echo "SATA/AHCI Controller" ;;
+        0107*) echo "SAS Controller" ;;
+        0108*) echo "NVMe Controller" ;;
+        01*)   echo "Mass Storage Controller" ;;
+        0200*) echo "Ethernet Controller" ;;
+        0280*) echo "Wireless Network Controller" ;;
+        02*)   echo "Network Controller" ;;
+        03*)   echo "Display Controller" ;;
+        0600*) echo "Host Bridge" ;;
+        0601*) echo "ISA Bridge" ;;
+        0604*) echo "PCI Bridge" ;;
+        06*)   echo "Bridge Device" ;;
+        0c03*) echo "USB Controller" ;;
+        0c05*) echo "SMBus Controller" ;;
+        *)     echo "PCI Device (class $1)" ;;
+    esac
+}
+
+show_platform() {
+    echo "=== SYSTEM & PLATFORM ==="
+    if [ -r /sys/class/dmi/id/sys_vendor ] || [ -r /sys/class/dmi/id/product_name ]; then
+        vendor="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || echo Unknown)"
+        product="$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo Unknown)"
+        bios="$(cat /sys/class/dmi/id/bios_vendor 2>/dev/null || echo Unknown)"
+        echo "  Manufacturer : $vendor"
+        echo "  Product      : $product"
+        echo "  Firmware     : $bios ($( [ -d /sys/firmware/efi ] && echo 'UEFI' || echo 'BIOS/Legacy' ))"
+        case "$vendor $product" in
+            *VirtualBox*|*innotek*|*Oracle*)
+                echo "  Environment  : Virtual Machine (Oracle VirtualBox)" ;;
+            *VMware*|*KVM*|*Bochs*|*Hyper-V*)
+                echo "  Environment  : Virtual Machine ($vendor)" ;;
+            *)
+                echo "  Environment  : Physical Hardware (Native)" ;;
+        esac
+    else
+        echo "  Firmware     : $( [ -d /sys/firmware/efi ] && echo 'UEFI' || echo 'BIOS/Legacy' )"
+    fi
+    echo "  Kernel       : $(uname -srm)"
+}
+
+show_cpu() {
+    echo "=== CPU ==="
+    arch="$(uname -m)"
+    model="$(awk -F: '/^model name/{gsub(/^[ \t]+/,"",$2); print $2; exit}' /proc/cpuinfo 2>/dev/null)"
+    vendor="$(awk -F: '/^vendor_id/{gsub(/^[ \t]+/,"",$2); print $2; exit}' /proc/cpuinfo 2>/dev/null)"
+    cores="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)"
+    mhz="$(awk -F: '/^cpu MHz/{gsub(/^[ \t]+/,"",$2); print $2; exit}' /proc/cpuinfo 2>/dev/null)"
+    virt="no"
+    grep -qE '\b(vmx|svm)\b' /proc/cpuinfo 2>/dev/null && virt="yes"
+    hv="no"
+    grep -q '\bhypervisor\b' /proc/cpuinfo 2>/dev/null && hv="yes (running inside hypervisor)"
+
+    echo "  Architecture : ${arch:-unknown}"
+    echo "  Vendor       : ${vendor:-unknown}"
+    echo "  Model        : ${model:-unknown}"
+    echo "  Logical CPUs : ${cores}"
+    [ -n "${mhz:-}" ] && echo "  Clock (MHz)  : ${mhz}"
+    echo "  HW Virt Flag : ${virt}"
+    echo "  Hypervisor   : ${hv}"
+}
+
+show_memory() {
+    echo "=== MEMORY ==="
+    if [ -r /proc/meminfo ]; then
+        total_kb="$(awk '/^MemTotal:/{print $2}' /proc/meminfo)"
+        free_kb="$(awk '/^MemFree:/{print $2}' /proc/meminfo)"
+        avail_kb="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)"
+        buffers_kb="$(awk '/^Buffers:/{print $2}' /proc/meminfo)"
+        cached_kb="$(awk '/^Cached:/{print $2}' /proc/meminfo)"
+        used_kb=$(( total_kb - avail_kb ))
+        echo "  Total RAM    : $((total_kb / 1024)) MB (${total_kb} kB)"
+        echo "  Used RAM     : $((used_kb / 1024)) MB"
+        echo "  Available    : $((avail_kb / 1024)) MB"
+        echo "  Free (raw)   : $((free_kb / 1024)) MB"
+        echo "  Buffers/Cache: $(( (buffers_kb + cached_kb) / 1024 )) MB"
+    else
+        echo "  Unable to read /proc/meminfo"
+    fi
+}
+
+show_pci() {
+    echo "=== PCI DEVICES ==="
+    found=0
+    for dev in /sys/bus/pci/devices/*; do
+        [ -d "$dev" ] || continue
+        found=1
+        slot="$(basename "$dev")"
+        vendor="$(cat "$dev/vendor" 2>/dev/null || echo 0x0000)"
+        device="$(cat "$dev/device" 2>/dev/null || echo 0x0000)"
+        class="$(cat "$dev/class" 2>/dev/null || echo 0x000000)"
+        driver="none"
+        [ -L "$dev/driver" ] && driver="$(basename "$(readlink "$dev/driver")")"
+        vname="$(pci_vendor_name "$vendor")"
+        cname="$(pci_class_name "$class")"
+        printf "  %-12s %-28s [%s:%s] %-26s driver=%s\n" \
+            "$slot" "$cname" "${vendor#0x}" "${device#0x}" "$vname" "$driver"
+    done
+    [ "$found" -eq 0 ] && echo "  No PCI devices detected."
+}
+
+show_network() {
+    echo "=== NETWORK ADAPTERS ==="
+    found=0
+    for net in /sys/class/net/*; do
+        [ -e "$net" ] || continue
+        iface="$(basename "$net")"
+        [ "$iface" = "lo" ] && continue
+        found=1
+        mac="$(cat "$net/address" 2>/dev/null || echo unknown)"
+        state="$(cat "$net/operstate" 2>/dev/null || echo unknown)"
+        driver="unknown"
+        [ -L "$net/device/driver" ] && driver="$(basename "$(readlink "$net/device/driver")")"
+        if [ -d "$net/wireless" ] || [ -d "$net/phy80211" ]; then
+            ntype="Wireless (Wi-Fi)"
+        else
+            ntype="Wired (Ethernet)"
+        fi
+        # Note VirtualBox emulated NICs explicitly
+        case "$driver" in
+            e1000|pcnet32|virtio_net)
+                if grep -qi "VirtualBox" /sys/class/dmi/id/product_name 2>/dev/null; then
+                    ntype="$ntype [VirtualBox Emulated]"
+                fi
+                ;;
+        esac
+        ipaddr="$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
+        printf "  %-10s %-34s state=%-7s driver=%-12s mac=%s\n" \
+            "$iface" "$ntype" "$state" "$driver" "$mac"
+        [ -n "${ipaddr:-}" ] && echo "             IPv4: $ipaddr"
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "  No network interfaces detected (offline or adapter disabled)."
+    fi
+    # Check for PCI Wi-Fi controllers without an active net interface (e.g. missing firmware)
+    for dev in /sys/bus/pci/devices/*; do
+        [ -d "$dev" ] || continue
+        class="$(cat "$dev/class" 2>/dev/null || echo "")"
+        case "${class#0x}" in
+            0280*)
+                if [ ! -d "$dev/net" ]; then
+                    vendor="$(cat "$dev/vendor" 2>/dev/null)"
+                    device="$(cat "$dev/device" 2>/dev/null)"
+                    driver="none"
+                    [ -L "$dev/driver" ] && driver="$(basename "$(readlink "$dev/driver")")"
+                    echo "  [!] PCI Wi-Fi controller $(basename "$dev") [${vendor#0x}:${device#0x}] driver=${driver} has no active netdev (check firmware/dmesg)."
+                fi
+                ;;
+        esac
+    done
+}
+
+show_storage() {
+    echo "=== STORAGE CONTROLLERS & BLOCK DEVICES ==="
+    echo "  Controllers:"
+    c_found=0
+    for dev in /sys/bus/pci/devices/*; do
+        [ -d "$dev" ] || continue
+        class="$(cat "$dev/class" 2>/dev/null || echo "")"
+        case "${class#0x}" in
+            01*)
+                c_found=1
+                vendor="$(cat "$dev/vendor" 2>/dev/null)"
+                device="$(cat "$dev/device" 2>/dev/null)"
+                driver="none"
+                [ -L "$dev/driver" ] && driver="$(basename "$(readlink "$dev/driver")")"
+                echo "    $(basename "$dev"): $(pci_class_name "$class") [${vendor#0x}:${device#0x}] driver=$driver"
+                ;;
+        esac
+    done
+    [ "$c_found" -eq 0 ] && echo "    None detected on PCI bus."
+
+    echo "  Block Devices:"
+    b_found=0
+    for blk in /sys/block/*; do
+        [ -d "$blk" ] || continue
+        name="$(basename "$blk")"
+        case "$name" in loop*|ram*|dm-*) continue ;; esac
+        b_found=1
+        sectors="$(cat "$blk/size" 2>/dev/null || echo 0)"
+        size_mb=$(( (sectors * 512) / 1048576 ))
+        model="$(cat "$blk/device/model" 2>/dev/null | tr -s ' ' || echo "Unknown")"
+        ro="$(cat "$blk/ro" 2>/dev/null || echo 0)"
+        case "$name" in
+            nvme*) dtype="NVMe" ;;
+            sr*)   dtype="Optical/ISO" ;;
+            vd*)   dtype="VirtIO" ;;
+            sd*)   dtype="SATA/SCSI/USB" ;;
+            *)     dtype="Block" ;;
+        esac
+        printf "    /dev/%-8s %-14s %7d MB  ro=%s  model=%s\n" \
+            "$name" "$dtype" "$size_mb" "$ro" "$model"
+        # Show partitions
+        for part in "$blk/${name}"*; do
+            [ -d "$part" ] || continue
+            pname="$(basename "$part")"
+            psec="$(cat "$part/size" 2>/dev/null || echo 0)"
+            pmb=$(( (psec * 512) / 1048576 ))
+            fstype="$(blkid "/dev/$pname" 2>/dev/null | sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')"
+            label="$(blkid "/dev/$pname" 2>/dev/null | sed -n 's/.*LABEL="\([^"]*\)".*/\1/p')"
+            printf "      └─ /dev/%-8s %6d MB  fs=%-8s label=%s\n" \
+                "$pname" "$pmb" "${fstype:-unknown}" "${label:--}"
+        done
+    done
+    [ "$b_found" -eq 0 ] && echo "    No block devices detected."
+}
+
+show_usb() {
+    echo "=== USB DEVICES ==="
+    found=0
+    for dev in /sys/bus/usb/devices/*; do
+        [ -f "$dev/idVendor" ] || continue
+        found=1
+        bus="$(cat "$dev/busnum" 2>/dev/null || echo ?)"
+        addr="$(cat "$dev/devnum" 2>/dev/null || echo ?)"
+        vid="$(cat "$dev/idVendor" 2>/dev/null || echo ????)"
+        pid="$(cat "$dev/idProduct" 2>/dev/null || echo ????)"
+        mfg="$(cat "$dev/manufacturer" 2>/dev/null || echo "")"
+        prod="$(cat "$dev/product" 2>/dev/null || echo "USB Device")"
+        speed="$(cat "$dev/speed" 2>/dev/null || echo ?)"
+        printf "  Bus %03d Dev %03d: ID %s:%s (%s Mbps) %s %s\n" \
+            "$bus" "$addr" "$vid" "$pid" "$speed" "$mfg" "$prod"
+    done
+    [ "$found" -eq 0 ] && echo "  No USB devices detected."
+}
+
+case "${1:-all}" in
+    cpu)     show_cpu ;;
+    memory|mem|ram) show_memory ;;
+    network|net)    show_network ;;
+    storage|disk|disks) show_storage ;;
+    usb)     show_usb ;;
+    pci)     show_pci ;;
+    all|"")
+        show_platform
+        echo ""
+        show_cpu
+        echo ""
+        show_memory
+        echo ""
+        show_storage
+        echo ""
+        show_network
+        echo ""
+        show_usb
+        echo ""
+        show_pci
+        ;;
+    -h|--help|help)
+        echo "Usage: hardware [cpu|memory|network|storage|usb|pci|all]"
+        ;;
+    *)
+        echo "hardware: unknown subcommand '$1'"
+        echo "Usage: hardware [cpu|memory|network|storage|usb|pci|all]"
+        exit 1
+        ;;
+esac

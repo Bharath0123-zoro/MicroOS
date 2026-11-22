@@ -1,0 +1,22 @@
+#!/bin/sh
+# MicroOS v1.0 Interactive Login Shell Launcher (/usr/local/sbin/microos-shell)
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export USER=micro
+export LOGNAME=micro
+export HOME=/home/micro
+export HOSTNAME=micro
+export TERM="${TERM:-linux}"
+export ENV=/etc/profile
+
+mkdir -p "$HOME"
+cd "$HOME" 2>/dev/null || cd /
+
+echo ""
+echo "MICROOS v1.0"
+echo ""
+echo "Welcome to MicroOS."
+echo "Type 'help' for available commands or 'arcade' for Micro Arcade."
+echo ""
+
+exec /bin/sh -l

@@ -1,0 +1,3 @@
+@echo off
+echo Starting MicroOS Graphical Desktop in Oracle VirtualBox (GUI Mode)...
+start "" "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm "linux" --type gui

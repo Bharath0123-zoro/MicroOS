@@ -1,0 +1,47 @@
+#!/bin/sh
+# MicroOS v1.0 Safe Persistent Storage Auto-Attacher
+# Only mounts a partition explicitly labeled MICROOS_PERSIST.
+# Never formats, repartitions, or alters any unknown disk.
+
+set -u
+
+PERSIST_MP="/persist"
+mkdir -p "$PERSIST_MP" /mnt/ssd
+
+dev="$(blkid -L MICROOS_PERSIST 2>/dev/null || true)"
+if [ -z "$dev" ]; then
+    # Fallback scan via blkid output parsing (BusyBox blkid may not support -L)
+    dev="$(blkid 2>/dev/null | grep 'LABEL="MICROOS_PERSIST"' | cut -d: -f1 | head -n1 || true)"
+fi
+
+if [ -z "$dev" ] || [ ! -b "$dev" ]; then
+    echo "[persist] No MICROOS_PERSIST partition detected; starting in minimal live mode."
+    exit 0
+fi
+
+fstype="$(blkid "$dev" 2>/dev/null | sed -n 's/.*TYPE="\([^"]*\)".*/\1/p')"
+case "$fstype" in
+    ext4|ext3|ext2)
+        if /bin/mount -t "$fstype" "$dev" "$PERSIST_MP" 2>/dev/null; then
+            echo "[persist] Attached persistent storage: $dev ($fstype) -> $PERSIST_MP"
+            mkdir -p "$PERSIST_MP/etc/iwd" "$PERSIST_MP/arcade" "$PERSIST_MP/home" "$PERSIST_MP/config"
+            chmod 0700 "$PERSIST_MP/etc/iwd" 2>/dev/null || true
+            # Restore saved Wi-Fi credentials with strict permissions
+            if [ -d "$PERSIST_MP/etc/iwd" ]; then
+                mkdir -p /var/lib/iwd
+                chmod 0700 /var/lib/iwd
+                cp -p "$PERSIST_MP/etc/iwd"/* /var/lib/iwd/ 2>/dev/null || true
+                chmod 0600 /var/lib/iwd/* 2>/dev/null || true
+            fi
+            # Mirror /mnt/ssd if unused
+            if ! grep -q " /mnt/ssd " /proc/mounts 2>/dev/null; then
+                /bin/mount --bind "$PERSIST_MP" /mnt/ssd 2>/dev/null || true
+            fi
+        else
+            echo "[persist] WARNING: Could not mount $dev; continuing in live mode."
+        fi
+        ;;
+    *)
+        echo "[persist] Skipping $dev (unsupported persistent fs '${fstype:-unknown}'); live mode active."
+        ;;
+esac

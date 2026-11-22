@@ -1,0 +1,26 @@
+#!/bin/sh
+# MicroOS v1.0 Debian-Compatible dpkg Wrapper (/usr/local/bin/dpkg)
+
+set -u
+
+for candidate in /persist/debian /mnt/ssd/debian /mnt/ssd/microos/debian /persist/microos/debian; do
+    if [ -x "$candidate/usr/bin/dpkg" ]; then
+        droot="$candidate"
+        break
+    fi
+done
+
+if [ -z "${droot:-}" ]; then
+    echo "dpkg: Persistent storage with Debian glibc userspace is required."
+    echo "      Run 'apt status' for details."
+    exit 1
+fi
+
+grep -q " $droot/proc " /proc/mounts 2>/dev/null || /bin/mount -t proc proc "$droot/proc"
+grep -q " $droot/sys "  /proc/mounts 2>/dev/null || /bin/mount -t sysfs sysfs "$droot/sys"
+grep -q " $droot/dev "  /proc/mounts 2>/dev/null || /bin/mount --bind /dev "$droot/dev"
+
+exec chroot "$droot" /usr/bin/env -i \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    TERM="${TERM:-linux}" HOME=/root \
+    /usr/bin/dpkg "$@"

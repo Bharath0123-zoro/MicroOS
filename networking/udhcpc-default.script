@@ -1,0 +1,37 @@
+#!/bin/sh
+# BusyBox udhcpc lease handler for MicroOS v1.0
+
+[ -z "$1" ] && exit 1
+
+RESOLV_CONF="/etc/resolv.conf"
+
+case "$1" in
+    deconfig)
+        ip addr flush dev "$interface" 2>/dev/null || true
+        ip link set dev "$interface" up 2>/dev/null || true
+        ;;
+    renew|bound)
+        ip addr flush dev "$interface" 2>/dev/null || true
+        if [ -n "${mask:-}" ]; then
+            ip addr add "${ip}/${mask}" dev "$interface" 2>/dev/null || \
+                ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}" up
+        else
+            ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}" up
+        fi
+        if [ -n "${router:-}" ]; then
+            ip route del default dev "$interface" 2>/dev/null || true
+            for gw in $router; do
+                ip route add default via "$gw" dev "$interface" 2>/dev/null || true
+                break
+            done
+        fi
+        if [ -n "${dns:-}" ]; then
+            : > "$RESOLV_CONF"
+            [ -n "${domain:-}" ] && echo "search $domain" >> "$RESOLV_CONF"
+            for ns in $dns; do
+                echo "nameserver $ns" >> "$RESOLV_CONF"
+            done
+        fi
+        ;;
+esac
+exit 0

@@ -1,0 +1,28 @@
+#!/bin/sh
+# MicroOS v1.0 Safe Unmount Command (/usr/local/bin/unmount)
+
+set -u
+
+target="${1:-/mnt/ssd}"
+if [ "$target" = "-h" ] || [ "$target" = "--help" ] || [ "$target" = "help" ]; then
+    echo "Usage: unmount [mountpoint | device]"
+    echo "  Default mountpoint: /mnt/ssd"
+    exit 0
+fi
+
+# Clean up any active Debian chroot bind mounts beneath target before unmounting
+for sub in dev/pts dev proc sys run; do
+    for base in "$target/microos/debian" "$target/debian"; do
+        if grep -q " $base/$sub " /proc/mounts 2>/dev/null; then
+            /bin/umount "$base/$sub" 2>/dev/null || true
+        fi
+    done
+done
+
+sync
+if /bin/umount "$target"; then
+    echo "Safely unmounted $target."
+else
+    echo "unmount: Failed to unmount '$target' (device may be busy or not mounted)."
+    exit 1
+fi

@@ -1,0 +1,13 @@
+build/sources/
+build/linux-*/
+build/busybox-*/
+build/rootfs-stage/
+build/iso-stage/
+build/builder/
+build/vm-disks/
+build/*.img
+build/*.vdi
+build/*.raw
+build/*.tar.*
+release/*.iso
+*.o
