@@ -11,3 +11,6 @@ build/*.raw
 build/*.tar.*
 release/*.iso
 *.o
+target/
+gui/target/
+

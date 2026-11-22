@@ -1,0 +1,43 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+
+echo ============================================================
+echo           MicroOS - Automated GitHub Publisher
+echo ============================================================
+echo Username : Bharath0123-zoro
+echo Repo Name: MicroOS
+echo Target   : https://github.com/Bharath0123-zoro/MicroOS
+echo ============================================================
+echo.
+
+git branch -M main
+git remote remove origin 2>nul
+git remote add origin https://github.com/Bharath0123-zoro/MicroOS.git
+
+echo [*] Staging all project files...
+git add .
+git status --short
+
+echo [*] Committing changes...
+git commit -m "release(v1.0): Complete MicroOS ultra-lightweight Linux OS and GUI Desktop Edition" 2>nul
+
+echo [*] Pushing to GitHub...
+git push -u origin main
+
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo ============================================================
+    echo   MICROOS SUCCESSFULLY PUBLISHED TO GITHUB!
+    echo ============================================================
+    echo   GitHub URL: https://github.com/Bharath0123-zoro/MicroOS
+    echo ============================================================
+) else (
+    echo.
+    echo [!] If the push failed because the repository does not exist yet:
+    echo     1. Go to https://github.com/new
+    echo     2. Create a new repository named: MicroOS (Public)
+    echo     3. Run this script again or run: git push -u origin main
+)
+
+pause
