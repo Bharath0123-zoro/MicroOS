@@ -10,6 +10,10 @@ import argparse
 from huggingface_hub import HfApi, login, get_token
 
 def main():
+    repo_dir = r"C:\Users\tirup\.gemini\antigravity\scratch\MicroOS"
+    if os.path.exists(repo_dir):
+        os.chdir(repo_dir)
+
     parser = argparse.ArgumentParser(description="Publish MicroOS to Hugging Face")
     parser.add_argument("--repo-id", default="Bharath0123-zoro/MicroOS", help="Hugging Face repo ID (e.g. username/MicroOS)")
     parser.add_argument("--repo-type", default="model", choices=["model", "dataset", "space"], help="Repository type")

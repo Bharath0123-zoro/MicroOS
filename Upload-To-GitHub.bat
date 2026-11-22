@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "C:\Users\tirup\.gemini\antigravity\scratch\MicroOS"
 
 echo ============================================================
 echo           MicroOS - Automated GitHub Publisher
@@ -8,6 +8,7 @@ echo ============================================================
 echo Username : Bharath0123-zoro
 echo Repo Name: MicroOS
 echo Target   : https://github.com/Bharath0123-zoro/MicroOS
+echo Location : %CD%
 echo ============================================================
 echo.
 
@@ -19,7 +20,7 @@ echo [*] Staging all project files...
 git add .
 git status --short
 
-echo [*] Committing changes...
+echo [*] Committing latest changes...
 git commit -m "release(v1.0): Complete MicroOS ultra-lightweight Linux OS and GUI Desktop Edition" 2>nul
 
 echo [*] Pushing to GitHub...
@@ -34,10 +35,11 @@ if %ERRORLEVEL% EQU 0 (
     echo ============================================================
 ) else (
     echo.
-    echo [!] If the push failed because the repository does not exist yet:
-    echo     1. Go to https://github.com/new
-    echo     2. Create a new repository named: MicroOS (Public)
-    echo     3. Run this script again or run: git push -u origin main
+    echo [!] Push failed. Please verify:
+    echo     1. Have you created the repository on GitHub?
+    echo        Go to: https://github.com/new and create 'MicroOS' (Public).
+    echo     2. Then run this script again!
 )
 
+echo.
 pause
