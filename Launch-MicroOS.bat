@@ -1,11 +1,27 @@
 @echo off
-set VBOX="C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
+title MicroOS Terminal Launcher
+echo ============================================================
+echo   MICROOS v1.0 - Minimal Linux. Maximum Control.
+echo ============================================================
+echo.
+
+REM 1. Clean up any stuck background VBoxSVC or orphaned VM processes
+echo [*] Clearing any stuck background VirtualBox services...
+taskkill /F /IM VirtualBoxVM.exe >nul 2>&1
+taskkill /F /IM VBoxSVC.exe >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+REM 2. Start VirtualBox VM directly in user's desktop session
+set VBOX="C:\Program Files\Oracle\VirtualBox\VirtualBoxVM.exe"
 set VMNAME=MicroOS-v1.0
 
-echo ===================================================
-echo   MICROOS v1.0 - Minimal Linux. Maximum Control.
-echo ===================================================
-echo Starting MicroOS in Oracle VirtualBox (Interactive GUI Window)...
-start "" %VBOX% startvm "%VMNAME%" --type gui
-echo.
-echo VirtualBox display window launched!
+echo [*] Starting MicroOS Terminal in a full interactive GUI window...
+if exist %VBOX% (
+    start "" %VBOX% --startvm "%VMNAME%"
+) else (
+    start "" "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" startvm "%VMNAME%" --type gui
+)
+
+echo [+] MicroOS window launched!
+echo     (You can now minimize or close this launcher window.)
+timeout /t 3 >nul
