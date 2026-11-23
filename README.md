@@ -32,6 +32,19 @@ It delivers two production bootable editions:
 
 ---
 
+## 📑 Academic Coursework & Lab Submissions
+
+All coursework reports, challenge investigations, and the complete 118-page OS Lab Record are located in the [`submissions/`](./submissions) directory:
+
+| Document | File | Pages | Summary | Direct Link |
+| :--- | :--- | :---: | :--- | :---: |
+| **OS Lab Practical Record** | `OS_Lab_Record_T_Bharath_(1).pdf` | 118 | Full practical lab record (20 chapters, Exp 2.24 – 21.02) | [View PDF](./submissions/OS_Lab_Record_T_Bharath_(1).pdf) |
+| **CA-2: Performance Investigation** | `performance_ivestigation_(1).pdf` | 6 | Safe-State Analysis under stochastic resource demand | [View PDF](./submissions/performance_ivestigation_(1).pdf) |
+| **CA-3: Design & Debugging** | `design_and_debugging_(1).pdf` | 8 | Banker's algorithm fault injection, concurrency race fixes & code | [View PDF](./submissions/design_and_debugging_(1).pdf) |
+| **CA-5: Linux Systems Engineering** | `Bharath_269_linux_(1).pdf` | 7 | Kernel `/proc` instrumentation, memory metrics & benchmarks | [View PDF](./submissions/Bharath_269_linux_(1).pdf) |
+
+---
+
 ## 🌟 Key Highlights
 
 - **Strict Size Budget Compliance**: Both editions are drastically smaller than the 50 MB requirement (GUI: **3.63 MB**, CLI: **12.77 MB**).
@@ -113,6 +126,12 @@ MicroOS/
 │   ├── microos-gui.vdi    # 5.24 MB VirtualBox virtual hard disk
 │   ├── microos.iso        # 12.77 MB Terminal CLI bootable image
 │   └── *.sha256           # SHA-256 verification digests
+├── submissions/           # Coursework: 118p Lab Record, CA-2, CA-3 & CA-5 PDFs
+│   ├── OS_Lab_Record_T_Bharath_(1).pdf # 118-page full practical lab record
+│   ├── performance_ivestigation_(1).pdf # CA-2: OS performance investigation
+│   ├── design_and_debugging_(1).pdf    # CA-3: OS design & debugging challenge
+│   ├── Bharath_269_linux_(1).pdf       # CA-5: Linux systems engineering challenge
+│   └── code_and_data/                  # Safe-state simulation scripts & datasets
 ├── documentation/         # Architecture, hardware detection, & build docs
 ├── Upload-To-GitHub.bat   # One-click GitHub repository publisher
 ├── Upload-To-HuggingFace.py # One-click Hugging Face model/artifact publisher
