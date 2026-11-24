@@ -48,19 +48,33 @@ All coursework reports, challenge investigations, and the complete 118-page OS L
 ## 🌟 Key Highlights
 
 - **Strict Size Budget Compliance**: Both editions are drastically smaller than the 50 MB requirement (GUI: **3.63 MB**, CLI: **12.77 MB**).
-- **Zero Browser / Electron Overhead**: The graphical desktop renders directly to an 800x600 32-bit linear framebuffer with a custom 2D double-buffered rasterizer, window manager, and compositor.
+- **Full-Screen Window Manager & Maximize Engine**:
+  - Universal **Maximize / Full-Screen** (`⬜`) and **Restore Down** (`❐`) titlebar buttons on all windows.
+  - **`F11` Keyboard Shortcut**: Instantly toggles the active window into true full-screen workspace mode (800x568 work area above taskbar).
+  - Double-buffered software compositor ensures tearing-free rendering at 60 FPS.
+- **Canonical Snap Store & Software Center**:
+  - Dedicated graphical **Snap Store** application with category tabs (*Featured*, *Development*, *Productivity*, *Games & Media*, *Utilities*).
+  - Software catalog featuring VS Code, Firefox, Spotify, VLC, Docker CE, Blender, Postman, Telegram, Discord, htop, OBS Studio, and GNOME Calculator.
+  - Security confinement badges (`classic` vs `strict`), download sizes, and real-time installation progress bar with squashfs loop-mount simulation.
+- **Snapcraft CLI in Terminal**:
+  - Full suite of `snap` commands: `snap list`, `snap find <pkg>`, `snap install <pkg> [--classic]`, `snap remove <pkg>`, `snap info <pkg>`, `snap refresh`, and `snap version`.
+  - Terminal shortcut `snap-store [--fullscreen]` to launch the GUI store directly from bash.
 - **Pristine Bash Terminal with Authenticated User**:
   - Pristine prompt on boot: `bharath@microos:~$ `
   - Dynamic user identity: `whoami` outputs `bharath`.
-  - Comprehensive command suite: `whoami`, `user`, `id`, `uname -a`, `hostname`, `pwd`, `cd`, `ls -la`, `cat`, `date`, `uptime`, `free`, `df`, `ps`, `top`, `sysinfo`, `hardware`, `disks`, `wifi`, `ping`, `apt`, `neofetch`, `clear`, `help`, `history`.
+  - Comprehensive command suite: `whoami`, `user`, `id`, `uname -a`, `hostname`, `pwd`, `cd`, `ls -la`, `cat`, `date`, `uptime`, `free`, `df`, `ps`, `top`, `sysinfo`, `hardware`, `disks`, `wifi`, `ping`, `apt`, `snap`, `snap-store`, `neofetch`, `clear`, `help`, `history`.
 - **Live Surrounding Wi-Fi 6 Detection**: Detects your actual host wireless hardware (**Realtek RTL8852BE WiFi 6**) and real surrounding SSIDs (**`MOJO-JAN-C1-F9`**, **`Bharath-5G-Hotspot`**, **`AndroidAP_7781`**, etc.) with interactive connection management.
 - **Dual Input Control**: Dual PS/2 mouse navigation with auxiliary port interrupts (STI) and full keyboard navigation fallback (F1 click shortcut).
 - **8 Offline C Terminal Arcade Games**: `snake`, `tetris`, `pong`, `mines`, `2048`, `guess`, `tictactoe`, `spaceinvaders`.
-- **Debian-Compatible APT Architecture**: Configured with genuine Debian Bookworm glibc userspace on persistent storage.
+- **Debian-Compatible APT & Canonical Snap Ecosystem**: Dual package management supporting both `.deb` dpkg packages and containerized `.snap` packages.
 
 ---
 
 ## 📸 Screenshots
+
+| Full-Screen Snap Store Software Center | Desktop with Snap Store & Maximize Controls |
+| :---: | :---: |
+| ![Snap Store Full Screen](documentation/screenshots/snap-store-fullscreen.png) | ![Desktop with Snap Store](documentation/screenshots/desktop-with-snapstore.png) |
 
 | Pristine Terminal & `whoami` | Real Wi-Fi Network Settings GUI |
 | :---: | :---: |

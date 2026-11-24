@@ -4,7 +4,7 @@ use crate::graphics::icons::{draw_icon_24, IconType};
 use crate::graphics::surface::Surface;
 
 pub const START_MENU_WIDTH: usize = 250;
-pub const START_MENU_HEIGHT: usize = 310;
+pub const START_MENU_HEIGHT: usize = 338;
 
 pub enum StartMenuAction {
     Launch(AppType),
@@ -28,7 +28,7 @@ pub fn render_start_menu(surface: &mut Surface, screen_h: usize) {
     surface.draw_rect(menu_x, menu_y, START_MENU_WIDTH, 44, Color::WIN_TITLEBAR);
     draw_icon_24(surface, menu_x + 8, menu_y + 10, IconType::StartLogo);
     surface.draw_string(menu_x + 38, menu_y + 10, "MicroOS Desktop", Color::WHITE);
-    surface.draw_string(menu_x + 38, menu_y + 26, "User: micro (Administrator)", Color::rgb(148, 163, 184));
+    surface.draw_string(menu_x + 38, menu_y + 26, "User: bharath (Administrator)", Color::rgb(148, 163, 184));
 
     // Application List Items
     let items = [
@@ -37,6 +37,7 @@ pub fn render_start_menu(surface: &mut Surface, screen_h: usize) {
         ("Producer-Consumer", IconType::ProducerConsumer),
         ("Terminal (Bash)", IconType::TerminalBash),
         ("Snake Game", IconType::SnakeGame),
+        ("Snap Store", IconType::SnapStore),
         ("APT Package Manager", IconType::AptPackageManager),
         ("WiFi & Network", IconType::WifiNetwork),
         ("File Manager", IconType::FileManager),
@@ -79,6 +80,7 @@ pub fn handle_start_click(click_x: i32, click_y: i32, screen_h: usize) -> Option
         AppType::Concurrency,
         AppType::Terminal,
         AppType::Snake,
+        AppType::SnapStore,
         AppType::Apt,
         AppType::Wifi,
         AppType::FileManager,
@@ -100,7 +102,7 @@ pub fn handle_start_click(click_x: i32, click_y: i32, screen_h: usize) -> Option
         return Some(StartMenuAction::Restart);
     }
 
-    // Shutdown button
+    // Shut Down button
     if click_x >= menu_x + 128 && click_x < menu_x + 233 && click_y >= power_y && click_y < power_y + 24 {
         return Some(StartMenuAction::Shutdown);
     }

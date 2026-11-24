@@ -14,6 +14,7 @@ pub enum IconType {
     ProducerConsumer,
     WifiNetwork,
     StartLogo,
+    SnapStore,
 }
 
 pub fn draw_icon_24(surface: &mut Surface, x: i32, y: i32, icon: IconType) {
@@ -132,6 +133,25 @@ pub fn draw_icon_24(surface: &mut Surface, x: i32, y: i32, icon: IconType) {
             surface.draw_rect(x + 2, y + 4, 5, 10, Color::ACCENT_BLUE);
             surface.draw_rect(x + 5, y + 2, 6, 12, Color::ACCENT_CYAN);
             surface.draw_rect(x + 9, y + 4, 4, 8, Color::WHITE);
+        }
+        IconType::SnapStore => {
+            // Ubuntu aubergine / Snapcraft orange shopping bag with origami diamond
+            let bag_bg = Color::rgb(233, 84, 32); // Snapcraft Orange
+            // Bag handles
+            surface.draw_rect_outline(x + 7, y + 2, 10, 6, Color::rgb(194, 65, 12));
+            // Bag body
+            surface.draw_rect(x + 3, y + 6, 18, 16, bag_bg);
+            surface.draw_rect_outline(x + 3, y + 6, 18, 16, Color::rgb(154, 52, 18));
+            // Center origami white diamond / star
+            surface.draw_rect(x + 10, y + 12, 4, 4, Color::WHITE);
+            surface.set_pixel(x + 11, y + 10, Color::WHITE);
+            surface.set_pixel(x + 12, y + 10, Color::WHITE);
+            surface.set_pixel(x + 11, y + 17, Color::WHITE);
+            surface.set_pixel(x + 12, y + 17, Color::WHITE);
+            surface.set_pixel(x + 8, y + 13, Color::WHITE);
+            surface.set_pixel(x + 8, y + 14, Color::WHITE);
+            surface.set_pixel(x + 15, y + 13, Color::WHITE);
+            surface.set_pixel(x + 15, y + 14, Color::WHITE);
         }
     }
 }

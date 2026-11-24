@@ -6,6 +6,7 @@ pub mod apt;
 pub mod wifi;
 pub mod terminal;
 pub mod files;
+pub mod snap_store;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AppType {
@@ -14,6 +15,7 @@ pub enum AppType {
     Concurrency,
     Snake,
     Apt,
+    SnapStore,
     Wifi,
     Terminal,
     FileManager,

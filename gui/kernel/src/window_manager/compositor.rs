@@ -8,6 +8,7 @@ use crate::apps::concurrency::ConcurrencyApp;
 use crate::apps::dashboard::DashboardApp;
 use crate::apps::files::FilesApp;
 use crate::apps::snake::SnakeApp;
+use crate::apps::snap_store::SnapStoreApp;
 use crate::apps::terminal::TerminalApp;
 use crate::apps::wifi::WifiApp;
 use crate::apps::AppType;
@@ -27,6 +28,7 @@ pub struct Compositor {
     pub concurrency_app: ConcurrencyApp,
     pub snake_app: SnakeApp,
     pub apt_app: AptApp,
+    pub snap_store_app: SnapStoreApp,
     pub wifi_app: WifiApp,
     pub terminal_app: TerminalApp,
     pub files_user_app: FilesApp,
@@ -47,6 +49,7 @@ impl Compositor {
             concurrency_app: ConcurrencyApp::new(),
             snake_app: SnakeApp::new(),
             apt_app: AptApp::new(),
+            snap_store_app: SnapStoreApp::new(),
             wifi_app: WifiApp::new(),
             terminal_app: TerminalApp::new(),
             files_user_app: FilesApp::new(false),
@@ -87,15 +90,37 @@ impl Compositor {
         }
     }
 
-    pub fn tick(&mut self) {
+    pub fn toggle_active_maximize(&mut self, work_w: usize, work_h: usize) {
+        if let Some(active_id) = self.active_id {
+            if let Some(win) = self.windows.iter_mut().find(|w| w.id == active_id) {
+                win.toggle_maximize(work_w, work_h);
+            }
+        }
+    }
+
+    pub fn tick(&mut self, work_w: usize, work_h: usize) {
         self.dashboard_app.tick();
         self.benchmark_app.tick();
         self.concurrency_app.tick();
         self.snake_app.tick();
+        self.snap_store_app.tick();
+
+        if self.snap_store_app.request_fullscreen {
+            self.snap_store_app.request_fullscreen = false;
+            for win in self.windows.iter_mut() {
+                if win.app_type == AppType::SnapStore {
+                    win.toggle_maximize(work_w, work_h);
+                    break;
+                }
+            }
+        }
 
         if let Some(app) = self.terminal_app.take_pending_launch() {
             match app {
                 AppType::Wifi => self.open_window("WiFi & Network Settings", 260, 50, 500, 320, app),
+                AppType::SnapStore => {
+                    self.open_window("Snap Store (Canonical Snapcraft)", 20, 20, 760, 520, app);
+                }
                 _ => {}
             }
         }
@@ -113,7 +138,7 @@ impl Compositor {
         }
     }
 
-    pub fn handle_click(&mut self, mouse_x: i32, mouse_y: i32) -> bool {
+    pub fn handle_click(&mut self, mouse_x: i32, mouse_y: i32, work_w: usize, work_h: usize) -> bool {
         let mut hit = None;
 
         for i in (0..self.windows.len()).rev() {
@@ -125,6 +150,7 @@ impl Compositor {
             if mouse_x >= win.x && mouse_x < win.x + win.width as i32 && mouse_y >= win.y && mouse_y < win.y + win.height as i32 {
                 let id = win.id;
                 let is_close = win.is_close_button_clicked(mouse_x, mouse_y);
+                let is_max = win.is_maximize_button_clicked(mouse_x, mouse_y);
                 let is_min = win.is_minimize_button_clicked(mouse_x, mouse_y);
                 let is_titlebar = win.is_titlebar_clicked(mouse_x, mouse_y);
                 let (cx, cy, _, _) = win.content_rect();
@@ -133,14 +159,22 @@ impl Compositor {
                 let drag_x = mouse_x - win.x;
                 let drag_y = mouse_y - win.y;
 
-                hit = Some((id, is_close, is_min, is_titlebar, rel_x, rel_y, drag_x, drag_y, win.app_type));
+                hit = Some((id, is_close, is_max, is_min, is_titlebar, rel_x, rel_y, drag_x, drag_y, win.app_type));
                 break;
             }
         }
 
-        if let Some((id, is_close, is_min, is_titlebar, rel_x, rel_y, drag_x, drag_y, app_type)) = hit {
+        if let Some((id, is_close, is_max, is_min, is_titlebar, rel_x, rel_y, drag_x, drag_y, app_type)) = hit {
             if is_close {
                 self.close_window(id);
+                return true;
+            }
+
+            if is_max {
+                if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+                    w.toggle_maximize(work_w, work_h);
+                }
+                self.bring_to_front(id);
                 return true;
             }
 
@@ -154,8 +188,12 @@ impl Compositor {
             self.bring_to_front(id);
 
             if is_titlebar {
-                self.dragging_id = Some(id);
-                self.drag_offset = (drag_x, drag_y);
+                if let Some(w) = self.windows.iter().find(|w| w.id == id) {
+                    if !w.is_maximized {
+                        self.dragging_id = Some(id);
+                        self.drag_offset = (drag_x, drag_y);
+                    }
+                }
                 return true;
             }
 
@@ -164,6 +202,7 @@ impl Compositor {
                 AppType::Concurrency => self.concurrency_app.handle_click(rel_x, rel_y),
                 AppType::Snake => self.snake_app.handle_click(rel_x, rel_y),
                 AppType::Apt => self.apt_app.handle_click(rel_x, rel_y),
+                AppType::SnapStore => self.snap_store_app.handle_click(rel_x, rel_y),
                 AppType::Wifi => self.wifi_app.handle_click(rel_x, rel_y),
                 _ => {}
             }
@@ -178,8 +217,10 @@ impl Compositor {
     pub fn handle_drag(&mut self, mouse_x: i32, mouse_y: i32) {
         if let Some(id) = self.dragging_id {
             if let Some(win) = self.windows.iter_mut().find(|w| w.id == id) {
-                win.x = (mouse_x - self.drag_offset.0).max(0);
-                win.y = (mouse_y - self.drag_offset.1).max(0);
+                if !win.is_maximized {
+                    win.x = (mouse_x - self.drag_offset.0).max(0);
+                    win.y = (mouse_y - self.drag_offset.1).max(0);
+                }
             }
         }
     }
@@ -204,6 +245,7 @@ impl Compositor {
                 AppType::Concurrency => self.concurrency_app.render(surface, cx, cy, cw, ch),
                 AppType::Snake => self.snake_app.render(surface, cx, cy, cw, ch),
                 AppType::Apt => self.apt_app.render(surface, cx, cy, cw, ch),
+                AppType::SnapStore => self.snap_store_app.render(surface, cx, cy, cw, ch),
                 AppType::Wifi => self.wifi_app.render(surface, cx, cy, cw, ch),
                 AppType::Terminal => self.terminal_app.render(surface, cx, cy, cw, ch),
                 AppType::FileManager | AppType::Home => self.files_user_app.render(surface, cx, cy, cw, ch),

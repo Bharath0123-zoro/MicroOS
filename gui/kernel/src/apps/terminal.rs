@@ -54,7 +54,7 @@ impl TerminalApp {
         let commands = [
             "whoami", "user", "id", "uname", "hostname", "pwd", "ls", "cat",
             "date", "uptime", "free", "df", "ps", "top", "sysinfo", "hardware",
-            "disks", "wifi", "ping", "apt", "neofetch", "clear", "help", "history",
+            "disks", "wifi", "ping", "apt", "snap", "snap-store", "snapstore", "neofetch", "clear", "help", "history",
             "echo", "cd", "mkdir", "touch", "rm", "env"
         ];
         for &cmd in commands.iter() {
@@ -425,6 +425,88 @@ impl TerminalApp {
                     }
                 }
             }
+            "snap" => {
+                if args.is_empty() || args[0].eq_ignore_ascii_case("help") || args[0].eq_ignore_ascii_case("--help") {
+                    self.push_line("Snap package manager v2.65.3 (Canonical Snapcraft)", Color::ACCENT_CYAN);
+                    self.push_line("Usage: snap <command> [<options>...]", Color::WHITE);
+                    self.push_line("Commands:", Color::MUTED_TEXT);
+                    self.push_line("  install <snap>    Install snap package (e.g. snap install code --classic)", Color::WHITE);
+                    self.push_line("  remove <snap>     Remove snap package from system", Color::WHITE);
+                    self.push_line("  list              List installed snaps (bare, core22, snapd, ...)", Color::WHITE);
+                    self.push_line("  find <query>      Find packages in store (alias: search)", Color::WHITE);
+                    self.push_line("  info <snap>       Show detailed information about a snap", Color::WHITE);
+                    self.push_line("  refresh           Refresh/update all installed snaps", Color::WHITE);
+                    self.push_line("  version           Display snapd & system version details", Color::WHITE);
+                } else {
+                    match args[0].to_ascii_lowercase().as_str() {
+                        "list" => {
+                            self.push_line("Name      Version   Rev    Tracking       Publisher   Notes", Color::ACCENT_CYAN);
+                            self.push_line("bare      1.0       5      latest/stable  canonical✓  base", Color::WHITE);
+                            self.push_line("core22    20240911  1621   latest/stable  canonical✓  base", Color::WHITE);
+                            self.push_line("snapd     2.65.3    21759  latest/stable  canonical✓  snapd", Color::WHITE);
+                            self.push_line("code      1.95.3    172    latest/stable  microsoft✓  classic", Color::WHITE);
+                            self.push_line("firefox   132.0.2   5122   latest/stable  mozilla✓    -", Color::WHITE);
+                            self.push_line("vlc       3.0.21    3721   latest/stable  videolan✓   -", Color::WHITE);
+                            self.push_line("htop      3.3.0     3441   latest/stable  maxiberta   -", Color::WHITE);
+                        }
+                        "find" | "search" => {
+                            let q = if args.len() > 1 { args[1] } else { "" };
+                            self.push_line(format!("Searching Snapcraft store for '{}'...", q), Color::MUTED_TEXT);
+                            self.push_line("Name      Version   Publisher   Notes    Summary", Color::ACCENT_CYAN);
+                            self.push_line("code      1.95.3    microsoft✓  classic  Code editing. Redefined.", Color::WHITE);
+                            self.push_line("firefox   132.0.2   mozilla✓    -        Fast, private and secure web browser", Color::WHITE);
+                            self.push_line("spotify   1.2.50    spotify✓    -        Music for everyone", Color::WHITE);
+                            self.push_line("vlc       3.0.21    videolan✓   -        The ultimate open source media player", Color::WHITE);
+                            self.push_line("docker    27.3.1    docker✓     classic  Pack, ship and run containers", Color::WHITE);
+                            self.push_line("blender   4.2.3     blender✓    classic  3D modeling and animation suite", Color::WHITE);
+                        }
+                        "install" => {
+                            let pkg = if args.len() > 1 { args[1] } else { "code" };
+                            let is_classic = args.contains(&"--classic");
+                            let conf_str = if is_classic { "classic" } else { "strict" };
+                            self.push_line(format!("2026-11-24T13:40:00Z INFO Fetching snap '{}' (channel: latest/stable)...", pkg), Color::WHITE);
+                            self.push_line(format!("2026-11-24T13:40:01Z INFO Mounting squashfs image /var/lib/snapd/snaps/{}.snap", pkg), Color::MUTED_TEXT);
+                            self.push_line(format!("2026-11-24T13:40:02Z INFO Setting up security confinement ({})", conf_str), Color::MUTED_TEXT);
+                            self.push_line(format!("snap '{}' installed successfully from channel 'latest/stable'.", pkg), Color::TERMINAL_GREEN);
+                        }
+                        "remove" => {
+                            let pkg = if args.len() > 1 { args[1] } else { "package" };
+                            self.push_line(format!("2026-11-24T13:40:00Z INFO Unmounting snap '{}'...", pkg), Color::MUTED_TEXT);
+                            self.push_line(format!("snap '{}' removed successfully.", pkg), Color::TERMINAL_GREEN);
+                        }
+                        "info" => {
+                            let pkg = if args.len() > 1 { args[1] } else { "code" };
+                            self.push_line(format!("name:    {}", pkg), Color::WHITE);
+                            self.push_line("summary: Official canonical snap package", Color::WHITE);
+                            self.push_line("publisher: Canonical / Verified Publisher ✓", Color::ACCENT_CYAN);
+                            self.push_line("store-url: https://snapcraft.io", Color::ACCENT_BLUE);
+                            self.push_line("license: unset", Color::WHITE);
+                            self.push_line("tracking: latest/stable", Color::WHITE);
+                            self.push_line("installed: 1.95.3 (172) 94MB -", Color::TERMINAL_GREEN);
+                        }
+                        "refresh" => {
+                            self.push_line("All snaps are up to date.", Color::TERMINAL_GREEN);
+                        }
+                        "version" => {
+                            self.push_line("snap    2.65.3", Color::WHITE);
+                            self.push_line("snapd   2.65.3", Color::WHITE);
+                            self.push_line("series  16", Color::WHITE);
+                            self.push_line("microos 1.0 (x86_64)", Color::WHITE);
+                            self.push_line("kernel  6.6.63-microos", Color::WHITE);
+                        }
+                        _ => {
+                            self.push_line(format!("snap: unknown command '{}'. Run 'snap --help'.", args[0]), Color::ACCENT_RED);
+                        }
+                    }
+                }
+            }
+            "snap-store" | "snapstore" => {
+                self.pending_launch = Some(crate::apps::AppType::SnapStore);
+                self.push_line("Launching Snap Store (Canonical Snapcraft Software Center)...", Color::TERMINAL_GREEN);
+                if args.contains(&"--fullscreen") || args.contains(&"-f") {
+                    self.push_line("Opening in Full Screen workspace mode.", Color::ACCENT_CYAN);
+                }
+            }
             "neofetch" | "fastfetch" => {
                 self.push_line("   /\\_/\\     bharath@microos", Color::ACCENT_CYAN);
                 self.push_line("  ( o.o )    ----------------", Color::ACCENT_CYAN);
@@ -487,9 +569,10 @@ impl TerminalApp {
                 self.push_line("  free, df, ps, top   : Memory, disk, and process stats", Color::WHITE);
                 self.push_line("  sysinfo, hardware   : System diagnostics report", Color::WHITE);
                 self.push_line("  disks, wifi, ping   : Storage & network management", Color::WHITE);
-                self.push_line("  apt, neofetch       : Package manager & system banner", Color::WHITE);
+                self.push_line("  apt, snap, snap-store: Package managers & Canonical Snap Store", Color::WHITE);
+                self.push_line("  neofetch, clear     : System banner & screen clear", Color::WHITE);
                 self.push_line("  mkdir, touch, rm    : File manipulation utilities", Color::WHITE);
-                self.push_line("  history, clear      : Command history and screen clear", Color::WHITE);
+                self.push_line("  history, help       : Command history and help reference", Color::WHITE);
             }
             "exit" | "logout" => {
                 self.push_line("logout", Color::MUTED_TEXT);

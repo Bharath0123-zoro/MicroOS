@@ -30,7 +30,7 @@ impl Desktop {
         // 1. Sleek Slate-Blue Desktop Background
         surface.clear(Color::DESKTOP_BG);
 
-        // 2. Desktop Application Icons in Two Columns matching user reference
+        // 2. Desktop Application Icons in Two Columns
         let col1_x = 24;
         let col2_x = 156;
 
@@ -48,6 +48,7 @@ impl Desktop {
             ("Micro OS Dashboard", IconType::MicroOSDashboard, col2_x, 96),
             ("Boot Time Benchmark", IconType::BootTimeBenchmark, col2_x, 172),
             ("APT Package Manager", IconType::AptPackageManager, col2_x, 248),
+            ("Snap Store", IconType::SnapStore, col2_x, 324),
         ];
 
         for (name, icon, ix, iy) in desktop_icons.iter() {
@@ -70,7 +71,7 @@ impl Desktop {
         }
     }
 
-    pub fn handle_click(&mut self, mouse_x: i32, mouse_y: i32, compositor: &mut Compositor, _screen_w: usize, screen_h: usize) -> bool {
+    pub fn handle_click(&mut self, mouse_x: i32, mouse_y: i32, compositor: &mut Compositor, screen_w: usize, screen_h: usize) -> bool {
         let taskbar_y = (screen_h - TASKBAR_HEIGHT) as i32;
 
         // 1. If Start Menu is open
@@ -132,8 +133,10 @@ impl Desktop {
             return true;
         }
 
-        // 3. Window Click
-        if compositor.handle_click(mouse_x, mouse_y) {
+        // 3. Window Click & Titlebar / Control Buttons (Pass work area dimensions for full-screen / maximize)
+        let work_w = screen_w;
+        let work_h = screen_h.saturating_sub(TASKBAR_HEIGHT);
+        if compositor.handle_click(mouse_x, mouse_y, work_w, work_h) {
             return true;
         }
 
@@ -153,6 +156,7 @@ impl Desktop {
             (AppType::Dashboard, col2_x, 96),
             (AppType::Benchmark, col2_x, 172),
             (AppType::Apt, col2_x, 248),
+            (AppType::SnapStore, col2_x, 324),
         ];
 
         for (app, ix, iy) in icon_targets.iter() {
@@ -182,6 +186,10 @@ impl Desktop {
             AppType::Apt => {
                 compositor.open_window("APT Package Manager", 330, 50, 450, 300, app);
             }
+            AppType::SnapStore => {
+                // Opens in spacious 760x520 layout near full screen (can be maximized to 800x568 work area)
+                compositor.open_window("Snap Store (Canonical Snapcraft)", 20, 20, 760, 520, app);
+            }
             AppType::Wifi => {
                 compositor.open_window("WiFi & Network Settings", 260, 50, 500, 320, app);
             }
@@ -195,7 +203,7 @@ impl Desktop {
                 compositor.open_window("File System (/)", 320, 40, 450, 280, app);
             }
             AppType::Home => {
-                compositor.open_window("Home (/home/micro)", 330, 50, 450, 280, app);
+                compositor.open_window("Home (/home/bharath)", 330, 50, 450, 280, app);
             }
         }
     }

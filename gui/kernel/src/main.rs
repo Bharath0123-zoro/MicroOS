@@ -92,8 +92,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     loop {
         // A. Tick application animations & timers
+        let work_w = screen_w;
+        let work_h = screen_h.saturating_sub(32);
         desktop.tick();
-        compositor.tick();
+        compositor.tick(work_w, work_h);
 
         // B. Process Keyboard Inputs
         while let Some(decoded_key) = drivers::ps2_keyboard::pop_key() {
@@ -133,6 +135,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                     pc_keyboard::KeyCode::F1 => {
                         let ms = ps2_mouse::get_mouse_state();
                         desktop.handle_click(ms.x, ms.y, &mut compositor, screen_w, screen_h);
+                    }
+                    pc_keyboard::KeyCode::F11 => {
+                        // F11: Toggle Full Screen / Maximize on Active Window
+                        compositor.toggle_active_maximize(work_w, work_h);
                     }
                     _ => {}
                 },
